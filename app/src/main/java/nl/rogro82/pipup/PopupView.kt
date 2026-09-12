@@ -12,7 +12,14 @@ import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -383,7 +390,53 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
                 with(settings) {
                     loadWithOverviewMode = true
                     useWideViewPort = true
+
+                    // A WebRTC/HLS embed page is a JavaScript application.
+                    // WebView defaults javaScriptEnabled to false, so without
+                    // this the page loads and draws nothing at all -- which
+                    // looks exactly like a blank popup with no error.
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+
+                    // Nobody can tap "play" on a notification overlay.
+                    mediaPlaybackRequiresUserGesture = false
+
+                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 }
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onPermissionRequest(request: PermissionRequest) {
+                        // Receive-only camera playback needs protected media at
+                        // most; anything else is unexpected here, so log it
+                        // rather than handing the page whatever it asks for.
+                        val granted = request.resources.filter {
+                            it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+                        }.toTypedArray()
+                        val denied = request.resources.filterNot {
+                            it == PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+                        }
+                        if (denied.isNotEmpty()) {
+                            Log.w(LOG_TAG, "web denied permissions: $denied")
+                        }
+                        if (granted.isEmpty()) request.deny() else request.grant(granted)
+                    }
+
+                    override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                        Log.d(LOG_TAG, "web console: ${message.message()}")
+                        return true
+                    }
+                }
+
+                webViewClient = object : WebViewClient() {
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        Log.e(LOG_TAG, "web error ${error?.errorCode}: ${error?.description}")
+                    }
+                }
+
                 loadUrl(media.uri)
                 frame.addView(
                     this,
