@@ -63,13 +63,80 @@ Example json data:
   }}
 }
 ```
-All fields are optional and for `media` you can specify 3 types:
+All fields are optional and for `media` you can specify 4 types:
 
 ```json 
 { "image": { "uri": "address_to_your_image", "width": 480 }}
 { "video": { "uri": "address_to_your_video", "width": 480 }}
+{ "mjpeg": { "uri": "address_to_your_mjpeg_stream", "width": 480 }}
 { "web":   { "uri": "address_to_your_resource", "width": 640, "height": 480 }}
 ```
+
+#### Playing over an app that is already playing
+
+A TV is almost always already playing something, and that used to stop a video
+popup from appearing. Three things changed:
+
+- Video renders into a `TextureView` rather than a `SurfaceView`, so the popup is
+  composited above the running app's video surface instead of behind it.
+- `preferSoftwareDecoder` (default `true`) keeps the popup off the hardware video
+  decoder, which the foreground app is usually holding. Most boxes expose only
+  one or two hardware decoder instances; a 480px popup costs very little to
+  decode in software. Set it to `false` for a large, high-bitrate popup.
+- `audioFocus` (default `"none"`) decides what happens to the running app's
+  sound. `"none"` plays the popup silently and leaves the show alone, `"duck"`
+  asks the running app to lower its volume, `"pause"` asks it to stop.
+
+You should no longer need to send a stop/quit command to the TV first.
+
+| Field                   | Default  | Meaning                                          |
+| ----------------------- | -------- | ------------------------------------------------ |
+| `audioFocus`            | `"none"` | `none` / `duck` / `pause`                        |
+| `volume`                | `0`      | Popup volume, `0.0`-`1.0`                        |
+| `preferSoftwareDecoder` | `true`   | Avoid contending for the hardware video decoder  |
+| `loop`                  | `true`   | Loop a short clip for the whole `duration`       |
+
+#### Use `mjpeg` for camera streams
+
+For a camera, `mjpeg` is much faster than `video`: there is no manifest or
+container to probe and no video decoder involved, so the first frame usually
+appears in well under a second rather than the ten or more seconds an HLS or
+RTSP handshake can take. Home Assistant serves exactly this shape of stream:
+
+```json
+{
+  "duration": 30,
+  "title": "Front door",
+  "media": { "mjpeg": {
+    "uri": "http://homeassistant.local:8123/api/camera_proxy_stream/camera.front_door?token=<signed_token>",
+    "width": 640
+  }}
+}
+```
+
+### Checking status
+
+| Property | Value     |
+| -------- | --------- |
+| Path:    | `/status` |
+| Method:  | GET       |
+
+Returns JSON with the app version, the listening address, whether the overlay
+permission has been granted, and whether a popup is currently showing. Useful as
+a Home Assistant availability check.
+
+### Autostart
+
+The service starts on boot, on the OEM "quickboot" broadcast that TVs send when
+they resume from a soft power-off, and after an app update. Because those
+broadcasts are all individually unreliable on TV firmware, a persisted
+`JobScheduler` job also checks every 15 minutes that the service and its socket
+are alive and revives them if not -- JobScheduler restores persisted jobs across
+reboots itself, so this keeps working even when every broadcast is missed.
+
+Open the app once after installing so it can grant itself the watchdog job, then
+check the status screen: it reports the overlay permission and battery
+optimisation state, which are the two settings that otherwise fail silently.
 
 #### To send notifications with an image file use multipart/form-data
 

@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           xmlns:tools="http://schemas.android.com/tools"
-          tools:ignore="GoogleAppIndexingWarning"
-          package="nl.rogro82.pipup">
+          tools:ignore="GoogleAppIndexingWarning">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <uses-feature
             android:name="android.hardware.touchscreen"
             android:required="false"/>
     <uses-feature
             android:name="android.software.leanback"
-            android:required="true"/>
+            android:required="false"/>
 
     <application
             android:allowBackup="true"
@@ -23,22 +25,43 @@
             android:label="@string/app_name"
             android:supportsRtl="true"
             android:theme="@style/AppTheme">
+
+        <!--
+          Autostart. BOOT_COMPLETED alone is not enough in practice:
+           - many TV boxes send only the OEM "quickboot" broadcast after a soft
+             power cycle (the TV suspends rather than shutting down),
+           - CONNECTIVITY_CHANGE has been an illegal manifest broadcast since
+             Android 8 and was being silently dropped, so it is gone from here
+             and registered at runtime instead,
+           - MY_PACKAGE_REPLACED gets the service back after an app update
+             without needing the launcher.
+          The persisted watchdog job in ServiceStarter is the real safety net.
+        -->
         <receiver
                 android:name=".Receiver"
                 android:enabled="true"
                 android:exported="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="android.intent.action.REBOOT"/>
+            </intent-filter>
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
         </receiver>
 
         <service
                 android:name=".PiPupService"
                 android:enabled="true"
-                android:exported="true">
-        </service>
+                android:exported="false"/>
+
+        <service
+                android:name=".WatchdogJobService"
+                android:enabled="true"
+                android:exported="false"
+                android:permission="android.permission.BIND_JOB_SERVICE"/>
 
         <activity
                 android:name=".MainActivity"
@@ -46,10 +69,12 @@
                 android:banner="@drawable/ic_banner"
                 android:icon="@drawable/ic_banner"
                 android:logo="@drawable/ic_banner"
+                android:exported="true"
                 android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
     </application>

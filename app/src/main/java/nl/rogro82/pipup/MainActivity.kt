@@ -1,62 +1,148 @@
-/*
- * Copyright (C) 2017 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- */
-
 package nl.rogro82.pipup
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.TextView
-import nl.rogro82.pipup.Utils.getIpAddress
 
+/**
+ * Status screen. Mostly a diagnostics page now: the three things that silently
+ * stop PiPup from working (no overlay permission, battery optimisation killing
+ * the service, no network) are each reported here instead of being invisible.
+ */
 class MainActivity : Activity() {
+
+    // Prompt at most once per visit; onResume runs again when the user returns
+    // from (or backs out of) the settings screen, and re-launching there loops.
+    private var promptedOverlay = false
+    private var promptedBattery = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // start service in foreground
+        ServiceStarter.scheduleWatchdog(this)
+        ServiceStarter.start(this)
 
-        val textViewConnection = findViewById<TextView>(R.id.textViewServerAddress)
-        val textViewServerAddress = findViewById<TextView>(R.id.textViewServerAddress)
+        requestNotificationPermission()
+    }
 
-        when(val ipAddress = getIpAddress()) {
+    override fun onResume() {
+        super.onResume()
+        render()
+    }
+
+    private fun render() {
+        val connection = findViewById<TextView>(R.id.textViewConnection)
+        val serverAddress = findViewById<TextView>(R.id.textViewServerAddress)
+        val warnings = findViewById<TextView>(R.id.textViewWarnings)
+
+        when (val ipAddress = Utils.getIpAddress()) {
             is String -> {
-                textViewConnection.setText(R.string.server_running)
-                textViewServerAddress.apply {
+                connection.setText(R.string.server_running)
+                serverAddress.apply {
                     visibility = View.VISIBLE
                     text = resources.getString(
-                        R.string.server_address,
-                        ipAddress,
-                        PiPupService.SERVER_PORT
+                        R.string.server_address, ipAddress, PiPupService.SERVER_PORT
                     )
                 }
             }
             else -> {
-                textViewConnection.setText(R.string.no_network_connection)
-                textViewServerAddress.visibility = View.INVISIBLE
+                connection.setText(R.string.no_network_connection)
+                serverAddress.visibility = View.INVISIBLE
             }
         }
 
+        val issues = mutableListOf<String>()
 
-        val serviceIntent = Intent(this, PiPupService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        if (!canDrawOverlays()) {
+            issues += getString(R.string.warning_overlay, packageName)
+            requestOverlayPermission()
         }
+
+        if (!isIgnoringBatteryOptimizations()) {
+            issues += getString(R.string.warning_battery)
+            requestBatteryOptimizationExemption()
+        }
+
+        warnings.apply {
+            if (issues.isEmpty()) {
+                visibility = View.GONE
+            } else {
+                visibility = View.VISIBLE
+                text = issues.joinToString("\n\n")
+            }
+        }
+    }
+
+    private fun canDrawOverlays(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+
+    /**
+     * Most Android TV builds have no UI for this and the intent throws, which is
+     * why the readme tells people to use adb. Try anyway -- newer Google TV
+     * builds do have the screen -- and fall back to the on-screen instructions.
+     */
+    private fun requestOverlayPermission() {
+        if (canDrawOverlays() || promptedOverlay) return
+        promptedOverlay = true
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (ex: Throwable) {
+            Log.w(LOG_TAG, "no overlay permission screen on this device: ${ex.message}")
+        }
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val powerManager = getSystemService(POWER_SERVICE) as? PowerManager ?: return true
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    @Suppress("BatteryLife")
+    private fun requestBatteryOptimizationExemption() {
+        if (isIgnoringBatteryOptimizations() || promptedBattery) return
+        promptedBattery = true
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (ex: Throwable) {
+            Log.w(LOG_TAG, "no battery optimisation screen on this device: ${ex.message}")
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED
+        ) return
+
+        try {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        } catch (ex: Throwable) {
+            Log.w(LOG_TAG, "could not request notification permission: ${ex.message}")
+        }
+    }
+
+    companion object {
+        const val LOG_TAG = "PiPupMain"
+        private const val REQUEST_NOTIFICATIONS = 1001
     }
 }

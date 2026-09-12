@@ -1,18 +1,42 @@
 apply plugin: 'com.android.application'
-
 apply plugin: 'kotlin-android'
 
-apply plugin: 'kotlin-android-extensions'
-
 android {
-    compileSdkVersion 28
+    namespace 'nl.rogro82.pipup'
+    compileSdk 34
+
     defaultConfig {
         applicationId "nl.rogro82.pipup"
         minSdkVersion 24
-        targetSdkVersion 28
-        versionCode 6
-        versionName "0.1.5-beta"
+
+        // Deliberately kept below 31: apps targeting Android 12+ may not start a
+        // foreground service from the background, which is exactly what the boot
+        // receiver and the watchdog job need to do.
+        targetSdkVersion 30
+
+        versionCode 7
+        versionName "0.2.0"
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    lint {
+        // Media3 marks most of ExoPlayer's configuration surface @UnstableApi.
+        disable 'UnsafeOptInUsageError'
+        abortOnError false
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -22,15 +46,21 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation"org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'com.android.support:leanback-v17:28.0.0'
-    implementation 'com.android.support:appcompat-v7:28.0.0'
-    implementation 'com.github.bumptech.glide:glide:3.8.0'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.9.+'
-    implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.9.+'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.annotation:annotation-experimental:1.4.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.leanback:leanback:1.0.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Media3/ExoPlayer replaces VideoView: renders into a TextureView (composited
+    // in the view hierarchy, so it draws over another app's video surface) and can
+    // fall back to a software decoder when the hardware decoder is already taken.
+    implementation "androidx.media3:media3-exoplayer:$media3_version"
+    implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
+    implementation "androidx.media3:media3-exoplayer-rtsp:$media3_version"
+    implementation "androidx.media3:media3-datasource:$media3_version"
 
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
-    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
 }
