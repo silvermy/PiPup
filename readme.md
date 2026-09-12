@@ -89,6 +89,18 @@ popup from appearing. Three things changed:
 
 You should no longer need to send a stop/quit command to the TV first.
 
+Measured on a Sony BRAVIA 4K UR2 (Android 10, MediaTek), popup fired at a
+fullscreen HLS stream playing in the built-in player, with no stop command sent
+and both decoders live at once:
+
+| Setting                         | Time to first frame |
+| ------------------------------- | ------------------- |
+| `preferSoftwareDecoder: true`   | 245 ms              |
+| `preferSoftwareDecoder: false`  | 296 ms              |
+
+Software decoding was not slower here, and it skips the vendor OMX component
+negotiation entirely, which is why it is the default.
+
 | Field                   | Default  | Meaning                                          |
 | ----------------------- | -------- | ------------------------------------------------ |
 | `audioFocus`            | `"none"` | `none` / `duck` / `pause`                        |
@@ -137,6 +149,22 @@ reboots itself, so this keeps working even when every broadcast is missed.
 Open the app once after installing so it can grant itself the watchdog job, then
 check the status screen: it reports the overlay permission and battery
 optimisation state, which are the two settings that otherwise fail silently.
+
+Verified on the device: killing the process the way the system does under memory
+pressure (`am kill`) brings the service back on its own within a few seconds.
+
+One case nothing can recover from, by Android's design rather than by omission:
+if the app is explicitly **force-stopped** (from the system app settings, or
+`am force-stop`), Android puts it in the stopped state and cancels its scheduled
+jobs. No broadcast and no job can start it again until it is launched once from
+the menu. Launching it restores the watchdog automatically.
+
+If the status screen warns about battery optimisation and the TV has no settings
+screen for it, whitelist it over adb:
+
+```
+adb shell dumpsys deviceidle whitelist +nl.rogro82.pipup
+```
 
 #### To send notifications with an image file use multipart/form-data
 
