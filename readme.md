@@ -126,6 +126,14 @@ RTSP handshake can take. Home Assistant serves exactly this shape of stream:
 }
 ```
 
+#### Plain http:// media URLs
+
+Android blocks cleartext HTTP for apps targeting API 28 and above, so `http://`
+media URIs -- a camera on the LAN, a Home Assistant instance on
+`http://<ip>:8123` -- failed with *Cleartext HTTP traffic not permitted* and no
+visible error. The app now opts back in to cleartext, because nearly everything
+it is pointed at lives on the local network.
+
 ### Checking status
 
 | Property | Value     |

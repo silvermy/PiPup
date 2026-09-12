@@ -19,11 +19,19 @@
             android:name="android.software.leanback"
             android:required="false"/>
 
+    <!--
+      usesCleartextTraffic: Android blocks plain http:// for apps targeting API
+      28+, which silently broke every LAN media URL -- camera snapshots, MJPEG
+      streams, a Home Assistant instance on http://<ip>:8123. This is a local
+      notification tool whose media almost always lives on the LAN, so cleartext
+      has to be allowed for it to be useful at all.
+    -->
     <application
             android:allowBackup="true"
             android:icon="@mipmap/ic_launcher"
             android:label="@string/app_name"
             android:supportsRtl="true"
+            android:usesCleartextTraffic="true"
             android:theme="@style/AppTheme">
 
         <!--
