@@ -21,10 +21,10 @@
 
     <!--
       usesCleartextTraffic: Android blocks plain http:// for apps targeting API
-      28+, which silently broke every LAN media URL -- camera snapshots, MJPEG
-      streams, a Home Assistant instance on http://<ip>:8123. This is a local
-      notification tool whose media almost always lives on the LAN, so cleartext
-      has to be allowed for it to be useful at all.
+      28 and above, which silently broke every LAN media URL: camera snapshots,
+      MJPEG streams, a Home Assistant instance on http://[ip]:8123. This is a
+      local notification tool whose media almost always lives on the LAN, so
+      cleartext has to be allowed for it to be useful at all.
     -->
     <application
             android:allowBackup="true"
