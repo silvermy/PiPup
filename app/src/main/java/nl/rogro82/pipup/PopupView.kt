@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.TextureView
@@ -113,11 +114,14 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
 
         private var textureView: TextureView? = null
 
+        private var startedAt: Long = 0L
+
         private val listener = object : Player.Listener {
             override fun onRenderedFirstFrame() {
-                // Swap the placeholder for the real thing only once there is
-                // something to show, so there is no black flash.
-                textureView?.visibility = View.VISIBLE
+                Log.d(
+                    LOG_TAG,
+                    "first frame after ${SystemClock.elapsedRealtime() - startedAt}ms"
+                )
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -145,7 +149,6 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             }
 
             textureView = TextureView(context).apply {
-                visibility = View.INVISIBLE
                 frame.addView(
                     this,
                     FrameLayout.LayoutParams(
@@ -192,6 +195,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
                         .build()
                 )
 
+                startedAt = SystemClock.elapsedRealtime()
                 prepare()
                 play()
             }

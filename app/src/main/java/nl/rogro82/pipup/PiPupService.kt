@@ -184,11 +184,17 @@ class PiPupService : Service(), WebServer.Handler {
         val codecSelector = MediaCodecSelector { mimeType, requiresSecure, requiresTunneling ->
             val decoders =
                 MediaCodecUtil.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
-            if (mPreferSoftwareDecoder) {
+            val ordered = if (mPreferSoftwareDecoder) {
                 decoders.sortedByDescending { it.softwareOnly }
             } else {
                 decoders
             }
+            Log.d(
+                LOG_TAG,
+                "codecs for $mimeType (preferSoftware=$mPreferSoftwareDecoder): " +
+                    ordered.joinToString { "${it.name}${if (it.softwareOnly) "(sw)" else ""}" }
+            )
+            ordered
         }
 
         val renderersFactory = DefaultRenderersFactory(this)
