@@ -18,6 +18,20 @@ android {
         versionName "0.2.0"
     }
 
+    // A committed debug keystore so every CI build is signed with the same key.
+    // Without it each runner generates its own ~/.android/debug.keystore and the
+    // TV rejects the update with INSTALL_FAILED_UPDATE_INCOMPATIBLE, forcing an
+    // uninstall (and losing the SYSTEM_ALERT_WINDOW grant) on every iteration.
+    signingConfigs {
+        debug {
+            storeFile file('debug.p12')
+            storeType 'PKCS12'
+            storePassword 'android'
+            keyAlias 'pipup'
+            keyPassword 'android'
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -38,6 +52,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

@@ -30,6 +30,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -37,6 +38,7 @@ import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.newFixedLengthResponse
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 
 @OptIn(UnstableApi::class)
 class PiPupService : Service(), WebServer.Handler {
@@ -185,14 +187,14 @@ class PiPupService : Service(), WebServer.Handler {
             val decoders =
                 MediaCodecUtil.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
             val ordered = if (mPreferSoftwareDecoder) {
-                decoders.sortedByDescending { it.softwareOnly }
+                decoders.sortedByDescending { isSoftwareDecoder(it) }
             } else {
                 decoders
             }
             Log.d(
                 LOG_TAG,
                 "codecs for $mimeType (preferSoftware=$mPreferSoftwareDecoder): " +
-                    ordered.joinToString { "${it.name}${if (it.softwareOnly) "(sw)" else ""}" }
+                    ordered.joinToString { "${it.name}${if (isSoftwareDecoder(it)) "(sw)" else ""}" }
             )
             ordered
         }
@@ -227,6 +229,18 @@ class PiPupService : Service(), WebServer.Handler {
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
+    }
+
+    /**
+     * media3's own [MediaCodecInfo.softwareOnly] is derived from the platform's
+     * isSoftwareOnly() on API 29+, and this Sony/MediaTek firmware reports false
+     * for OMX.google.h264.decoder -- which made preferSoftwareDecoder a no-op.
+     * Fall back to the name convention media3 itself uses on older API levels.
+     */
+    private fun isSoftwareDecoder(info: MediaCodecInfo): Boolean {
+        if (info.softwareOnly) return true
+        val name = info.name.lowercase(Locale.US)
+        return SOFTWARE_DECODER_PREFIXES.any { name.startsWith(it) }
     }
 
     // endregion
@@ -497,6 +511,10 @@ class PiPupService : Service(), WebServer.Handler {
         private const val HTTP_READ_TIMEOUT_MS = 8000
         private const val SERVER_START_ATTEMPTS = 5
         private const val SERVER_RETRY_DELAY_MS = 500L
+
+        private val SOFTWARE_DECODER_PREFIXES = listOf(
+            "omx.google.", "c2.android.", "c2.google.", "omx.ffmpeg.", "arm."
+        )
 
         @Volatile
         private var serverAlive = false
