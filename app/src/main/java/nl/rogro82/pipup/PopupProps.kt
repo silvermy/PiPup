@@ -31,8 +31,19 @@ data class PopupProps(
     val preferSoftwareDecoder: Boolean = DEFAULT_PREFER_SOFTWARE_DECODER,
 
     /** Loop short clips for the whole [duration] instead of freezing on the last frame. */
-    val loop: Boolean = DEFAULT_LOOP
+    val loop: Boolean = DEFAULT_LOOP,
+
+    /**
+     * Remote keys that dismiss this popup, as Android key names ("BACK",
+     * "DPAD_CENTER", ...), or [DISMISS_ANY] for "any key". Empty means the
+     * popup is not interactive at all, which is the default: receiving keys
+     * requires taking focus, and a focused overlay stops the remote reaching
+     * whatever app is playing underneath.
+     */
+    val dismissKeys: Set<String> = emptySet()
 ) {
+    val interactive: Boolean get() = dismissKeys.isNotEmpty()
+
     sealed class Media {
         abstract val width: Int
 
@@ -109,6 +120,9 @@ data class PopupProps(
         const val DEFAULT_PREFER_SOFTWARE_DECODER = true
         const val DEFAULT_LOOP = true
 
+        /** Sentinel in [dismissKeys] meaning "any key dismisses". */
+        const val DISMISS_ANY = "ANY"
+
         val DEFAULT_POSITION: Position = Position.TopRight
         val DEFAULT_AUDIO_FOCUS: AudioFocus = AudioFocus.None
 
@@ -135,8 +149,21 @@ data class PopupProps(
                 volume = (json.optFloatOrNull("volume") ?: DEFAULT_VOLUME).coerceIn(0f, 1f),
                 preferSoftwareDecoder = json.optBooleanOrNull("preferSoftwareDecoder")
                     ?: DEFAULT_PREFER_SOFTWARE_DECODER,
-                loop = json.optBooleanOrNull("loop") ?: DEFAULT_LOOP
+                loop = json.optBooleanOrNull("loop") ?: DEFAULT_LOOP,
+                dismissKeys = parseDismissKeys(json.opt("dismissOnKey"))
             )
+        }
+
+        /** Accepts `true` (any key) or a list of key names. */
+        private fun parseDismissKeys(value: Any?): Set<String> = when (value) {
+            null, false, JSONObject.NULL -> emptySet()
+            true -> setOf(DISMISS_ANY)
+            is org.json.JSONArray -> (0 until value.length())
+                .mapNotNull { value.optString(it, "").takeIf { s -> s.isNotEmpty() } }
+                .map { it.trim().uppercase(java.util.Locale.US) }
+                .toSet()
+            else -> value.toString().trim().uppercase(java.util.Locale.US)
+                .takeIf { it.isNotEmpty() }?.let { setOf(it) } ?: emptySet()
         }
 
         private fun parseMedia(media: JSONObject?): Media? {

@@ -18,6 +18,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -44,7 +45,10 @@ import java.util.Locale
 class PiPupService : Service(), WebServer.Handler {
 
     private val mHandler: Handler = Handler(Looper.getMainLooper())
-    private var mOverlay: FrameLayout? = null
+    private var mOverlay: OverlayView? = null
+
+    /** Whether the overlay window currently holds focus, so flags only change when needed. */
+    private var mOverlayInteractive: Boolean = false
     private var mPopup: PopupView? = null
     private var mWebServer: WebServer? = null
 
@@ -324,29 +328,39 @@ class PiPupService : Service(), WebServer.Handler {
 
             removePopup()
 
-            mOverlay = (mOverlay ?: FrameLayout(this).apply {
-                setPadding(20, 20, 20, 20)
+            val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-                val layoutFlags = when {
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ->
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                    else -> WindowManager.LayoutParams.TYPE_TOAST
+            mOverlay = (mOverlay ?: OverlayView(this).apply {
+                setPadding(20, 20, 20, 20)
+                windowManager.addView(this, overlayParams(popup.interactive))
+                mOverlayInteractive = popup.interactive
+            }).also { overlay ->
+
+                // The overlay is reused between popups, so focusability has to
+                // follow whichever popup is showing now.
+                if (mOverlayInteractive != popup.interactive) {
+                    windowManager.updateViewLayout(overlay, overlayParams(popup.interactive))
+                    mOverlayInteractive = popup.interactive
                 }
 
-                val params = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    layoutFlags,
-                    // NOT_TOUCHABLE added so the overlay cannot swallow input
-                    // aimed at the app underneath it.
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    PixelFormat.TRANSLUCENT
-                )
+                overlay.onKey = if (!popup.interactive) null else { event ->
+                    if (!dismissesOn(popup, event.keyCode)) false else {
+                        // Consume both down and up so no stray event escapes,
+                        // but act once, on release.
+                        if (event.action == KeyEvent.ACTION_UP) {
+                            Log.d(LOG_TAG, "dismissed by key ${event.keyCode}")
+                            mHandler.post { removePopup(true) }
+                        }
+                        true
+                    }
+                }
 
-                val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                windowManager.addView(this, params)
-            }).also { overlay ->
+                if (popup.interactive) {
+                    overlay.isFocusableInTouchMode = true
+                    overlay.isFocusable = true
+                    overlay.requestFocus()
+                }
+
                 overlay.visibility = View.VISIBLE
 
                 mPopup = PopupView.build(this, popup, player())
@@ -374,6 +388,40 @@ class PiPupService : Service(), WebServer.Handler {
         } catch (ex: Throwable) {
             Log.e(LOG_TAG, "error creating popup: ${ex.message}", ex)
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun overlayParams(interactive: Boolean): WindowManager.LayoutParams {
+        val layoutFlags = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ->
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else -> WindowManager.LayoutParams.TYPE_TOAST
+        }
+
+        // NOT_TOUCHABLE always: the overlay must never swallow touches meant for
+        // the app underneath. NOT_FOCUSABLE only for non-interactive popups --
+        // dropping it is what lets remote keys reach the window, at the cost of
+        // taking the remote away from that app while the popup is up.
+        var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (!interactive) {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+
+        return WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            layoutFlags,
+            flags,
+            PixelFormat.TRANSLUCENT
+        )
+    }
+
+    /** Accepts either "BACK" or "KEYCODE_BACK" in the payload. */
+    private fun dismissesOn(popup: PopupProps, keyCode: Int): Boolean {
+        if (popup.dismissKeys.contains(PopupProps.DISMISS_ANY)) return true
+        val name = KeyEvent.keyCodeToString(keyCode)
+        return popup.dismissKeys.contains(name) ||
+            popup.dismissKeys.contains(name.removePrefix("KEYCODE_"))
     }
 
     // endregion

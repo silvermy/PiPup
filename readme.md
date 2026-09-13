@@ -134,6 +134,35 @@ media URIs -- a camera on the LAN, a Home Assistant instance on
 visible error. The app now opts back in to cleartext, because nearly everything
 it is pointed at lives on the local network.
 
+#### Dismissing a popup with the remote
+
+`dismissOnKey` lets a remote key close the popup instead of waiting out its
+`duration`:
+
+```json
+{ "title": "Front Door", "duration": 60, "dismissOnKey": true }
+{ "title": "Front Door", "duration": 60, "dismissOnKey": ["BACK", "DPAD_CENTER"] }
+```
+
+`true` means any key. A list takes Android key names, with or without the
+`KEYCODE_` prefix.
+
+There is a real cost, which is why this is off by default. Receiving a key
+requires the overlay window to hold input focus, and a focused overlay stops the
+remote reaching whatever app is playing underneath for as long as the popup is
+up. Keys that are not in the list are swallowed, not passed through -- Android
+gives a window focus or it does not, with nothing in between.
+
+`dismissOnKey: true` is therefore the sensible setting: the first key you press
+dismisses the popup and hands focus straight back, so at most one keystroke is
+lost. A narrow list is only worth it if you deliberately want the popup to
+ignore most of the remote.
+
+Every key the overlay receives is logged as
+`PiPupOverlay: key KEYCODE_X (code N)`, which is how to find out what a given TV
+remote actually emits before mapping it -- remotes differ, and colour buttons
+frequently never reach apps at all.
+
 ### Checking status
 
 | Property | Value     |
