@@ -344,12 +344,12 @@ class PiPupService : Service(), WebServer.Handler {
                 }
 
                 overlay.onKey = if (!popup.interactive) null else { event ->
-                    if (!dismissesOn(popup, event.keyCode)) false else {
+                    val action = actionFor(popup, event.keyCode)
+                    if (action == null) false else {
                         // Consume both down and up so no stray event escapes,
                         // but act once, on release.
                         if (event.action == KeyEvent.ACTION_UP) {
-                            Log.d(LOG_TAG, "dismissed by key ${event.keyCode}")
-                            mHandler.post { removePopup(true) }
+                            mHandler.post { runKeyAction(popup, action) }
                         }
                         true
                     }
@@ -417,11 +417,96 @@ class PiPupService : Service(), WebServer.Handler {
     }
 
     /** Accepts either "BACK" or "KEYCODE_BACK" in the payload. */
-    private fun dismissesOn(popup: PopupProps, keyCode: Int): Boolean {
-        if (popup.dismissKeys.contains(PopupProps.DISMISS_ANY)) return true
+    private fun actionFor(popup: PopupProps, keyCode: Int): PopupProps.KeyAction? {
         val name = KeyEvent.keyCodeToString(keyCode)
-        return popup.dismissKeys.contains(name) ||
-            popup.dismissKeys.contains(name.removePrefix("KEYCODE_"))
+        val short = name.removePrefix("KEYCODE_")
+
+        popup.keys[name]?.let { return it }
+        popup.keys[short]?.let { return it }
+
+        val dismissAll = popup.dismissKeys.contains(PopupProps.DISMISS_ANY)
+        if (dismissAll || popup.dismissKeys.contains(name) || popup.dismissKeys.contains(short)) {
+            return PopupProps.KeyAction.Dismiss
+        }
+        return null
+    }
+
+    private fun runKeyAction(popup: PopupProps, action: PopupProps.KeyAction) {
+        Log.d(LOG_TAG, "key action: $action")
+        when (action) {
+            is PopupProps.KeyAction.Dismiss -> removePopup(true)
+
+            is PopupProps.KeyAction.ReleaseFocus -> releaseOverlayFocus()
+
+            is PopupProps.KeyAction.Launch -> {
+                launchApp(action.packageName)
+                // The popup would otherwise sit on top of the app just opened.
+                removePopup(true)
+            }
+
+            is PopupProps.KeyAction.Fetch -> fetchAsync(action.url, action.method)
+
+            // Rebuild through the normal path so sizing, the shared player and
+            // the duration timer all behave exactly as for a fresh popup.
+            is PopupProps.KeyAction.ShowMedia -> createPopup(popup.copy(media = action.media))
+        }
+    }
+
+    /** Keeps the popup up but hands the remote back to the app underneath. */
+    private fun releaseOverlayFocus() {
+        val overlay = mOverlay ?: return
+        if (!mOverlayInteractive) return
+        try {
+            val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            windowManager.updateViewLayout(overlay, overlayParams(interactive = false))
+            mOverlayInteractive = false
+            overlay.onKey = null
+            Log.d(LOG_TAG, "overlay focus released")
+        } catch (ex: Throwable) {
+            Log.w(LOG_TAG, "could not release focus: ${ex.message}")
+        }
+    }
+
+    /**
+     * Background activity starts are blocked from API 29, but holding
+     * SYSTEM_ALERT_WINDOW is an explicit exemption -- which PiPup needs anyway.
+     */
+    private fun launchApp(packageName: String) {
+        try {
+            val intent = packageManager.getLeanbackLaunchIntentForPackage(packageName)
+                ?: packageManager.getLaunchIntentForPackage(packageName)
+            if (intent == null) {
+                Log.e(LOG_TAG, "no launch intent for '$packageName' (installed?)")
+                return
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (ex: Throwable) {
+            Log.e(LOG_TAG, "could not launch '$packageName': ${ex.message}")
+        }
+    }
+
+    /** Fire-and-forget; the response body is irrelevant for a webhook. */
+    private fun fetchAsync(url: String, method: String) {
+        Thread({
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = method
+                    connectTimeout = HTTP_CONNECT_TIMEOUT_MS
+                    readTimeout = HTTP_READ_TIMEOUT_MS
+                    if (method != "GET") {
+                        doOutput = true
+                        outputStream.use { it.write(ByteArray(0)) }
+                    }
+                }
+                Log.d(LOG_TAG, "$method $url -> ${connection.responseCode}")
+            } catch (ex: Throwable) {
+                Log.e(LOG_TAG, "$method $url failed: ${ex.message}")
+            } finally {
+                try { connection?.disconnect() } catch (_: Throwable) {}
+            }
+        }, "pipup-key-fetch").apply { isDaemon = true }.start()
     }
 
     // endregion

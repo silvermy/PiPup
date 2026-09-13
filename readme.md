@@ -163,6 +163,44 @@ Every key the overlay receives is logged as
 remote actually emits before mapping it -- remotes differ, and colour buttons
 frequently never reach apps at all.
 
+#### Remote key actions
+
+`keys` maps a remote key to an action. Bare strings are shorthand for the
+no-argument ones:
+
+```json
+{
+  "title": "Front Door",
+  "duration": 60,
+  "media": { "mjpeg": { "uri": "http://ha:8123/api/camera_proxy_stream/camera.doorbell?token=..." } },
+  "keys": {
+    "BACK":        "dismiss",
+    "DPAD_CENTER": "release",
+    "DPAD_UP":     { "launch": "org.xbmc.kodi" },
+    "DPAD_LEFT":   { "url": "http://ha:8123/api/webhook/unlock_front_door" },
+    "DPAD_RIGHT":  { "media": { "mjpeg": { "uri": "...camera.dungeon...", "width": 640 } } }
+  }
+}
+```
+
+| action     | does                                                              |
+| ---------- | ----------------------------------------------------------------- |
+| `dismiss`  | close the popup and hand focus back                               |
+| `release`  | keep the popup up, give the remote back to the app underneath     |
+| `launch`   | start an app by package name; the popup closes with it            |
+| `url`      | fire an HTTP request and ignore the reply (`method`, default POST)|
+| `media`    | swap what the popup shows, e.g. to the next camera                |
+
+`url` is the general escape hatch: point it at a Home Assistant webhook and a
+key can trigger any automation you can write, with no app changes.
+
+**A popup with no `keys` and no `dismissOnKey` never takes focus.** That is the
+whole reason both are opt-in: the window only drops `FLAG_NOT_FOCUSABLE` when
+there is something to listen for, so ordinary notifications behave exactly as
+before and the remote keeps driving whatever is playing. When a popup *is*
+interactive, unmatched keys are swallowed rather than passed through -- pair it
+with `release` (or use `dismissOnKey: true`) so there is always a way out.
+
 ### Checking status
 
 | Property | Value     |

@@ -40,9 +40,30 @@ data class PopupProps(
      * requires taking focus, and a focused overlay stops the remote reaching
      * whatever app is playing underneath.
      */
-    val dismissKeys: Set<String> = emptySet()
+    val dismissKeys: Set<String> = emptySet(),
+
+    /** Remote key name -> what it does. See [KeyAction]. */
+    val keys: Map<String, KeyAction> = emptyMap()
 ) {
-    val interactive: Boolean get() = dismissKeys.isNotEmpty()
+    /** True when this popup needs input focus, which is what makes keys reach it. */
+    val interactive: Boolean get() = dismissKeys.isNotEmpty() || keys.isNotEmpty()
+
+    sealed class KeyAction {
+        /** Close the popup and hand focus back. */
+        object Dismiss : KeyAction()
+
+        /** Keep the popup on screen but give the remote back to the app underneath. */
+        object ReleaseFocus : KeyAction()
+
+        /** Start another app by package name; the popup closes with it. */
+        data class Launch(val packageName: String) : KeyAction()
+
+        /** Fire an HTTP request and ignore the body -- aimed at webhooks. */
+        data class Fetch(val url: String, val method: String = "POST") : KeyAction()
+
+        /** Replace what the popup is showing, e.g. to switch camera. */
+        data class ShowMedia(val media: Media) : KeyAction()
+    }
 
     sealed class Media {
         abstract val width: Int
@@ -150,8 +171,46 @@ data class PopupProps(
                 preferSoftwareDecoder = json.optBooleanOrNull("preferSoftwareDecoder")
                     ?: DEFAULT_PREFER_SOFTWARE_DECODER,
                 loop = json.optBooleanOrNull("loop") ?: DEFAULT_LOOP,
-                dismissKeys = parseDismissKeys(json.opt("dismissOnKey"))
+                dismissKeys = parseDismissKeys(json.opt("dismissOnKey")),
+                keys = parseKeys(json.optJSONObject("keys"))
             )
+        }
+
+        /**
+         * Key map. A bare string is shorthand for the no-argument actions:
+         *   "BACK": "dismiss"       "DPAD_CENTER": "release"
+         * Anything else is an object naming exactly one action:
+         *   { "launch": "org.xbmc.kodi" }
+         *   { "url": "http://ha/api/webhook/x", "method": "POST" }
+         *   { "media": { "mjpeg": { "uri": "...", "width": 640 } } }
+         */
+        private fun parseKeys(obj: JSONObject?): Map<String, KeyAction> {
+            if (obj == null) return emptyMap()
+            val out = mutableMapOf<String, KeyAction>()
+            for (name in obj.keys()) {
+                val key = name.trim().uppercase(java.util.Locale.US)
+                when (val v = obj.opt(name)) {
+                    is String -> when (v.trim().lowercase(java.util.Locale.US)) {
+                        "dismiss", "close", "quit" -> out[key] = KeyAction.Dismiss
+                        "release", "releasefocus" -> out[key] = KeyAction.ReleaseFocus
+                        else -> {}
+                    }
+                    is JSONObject -> {
+                        v.optStringOrNull("launch")?.let { out[key] = KeyAction.Launch(it) }
+                        v.optStringOrNull("url")?.let {
+                            out[key] = KeyAction.Fetch(
+                                it,
+                                v.optStringOrNull("method")?.uppercase(java.util.Locale.US) ?: "POST"
+                            )
+                        }
+                        v.optJSONObject("media")?.let { m ->
+                            parseMedia(m)?.let { out[key] = KeyAction.ShowMedia(it) }
+                        }
+                    }
+                    else -> {}
+                }
+            }
+            return out
         }
 
         /** Accepts `true` (any key) or a list of key names. */
