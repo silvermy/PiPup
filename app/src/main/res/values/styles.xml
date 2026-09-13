@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="@style/Theme.Leanback"/>
+    <style name="TriggerTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoDisplay">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

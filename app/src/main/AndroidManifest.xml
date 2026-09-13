@@ -71,6 +71,47 @@
                 android:exported="false"
                 android:permission="android.permission.BIND_JOB_SERVICE"/>
 
+        <!--
+          Trigger entries. Each alias appears to a launcher (and therefore to a
+          key-mapper app) as its own launchable item, which is the only action
+          such apps reliably support. They draw nothing: the activity fires its
+          configured URL and finishes.
+        -->
+        <activity
+                android:name=".TriggerActivity"
+                android:exported="false"
+                android:excludeFromRecents="true"
+                android:noHistory="true"
+                android:theme="@style/TriggerTheme"/>
+
+        <activity-alias
+                android:name=".TriggerDungeon"
+                android:targetActivity=".TriggerActivity"
+                android:exported="true"
+                android:label="@string/trigger_dungeon"
+                android:icon="@drawable/ic_banner"
+                android:banner="@drawable/ic_banner">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+                android:name=".TriggerDoorbell"
+                android:targetActivity=".TriggerActivity"
+                android:exported="true"
+                android:label="@string/trigger_doorbell"
+                android:icon="@drawable/ic_banner"
+                android:banner="@drawable/ic_banner">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
         <activity
                 android:name=".MainActivity"
                 android:label="@string/app_name"

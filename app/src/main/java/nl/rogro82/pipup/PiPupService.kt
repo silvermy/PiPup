@@ -519,6 +519,19 @@ class PiPupService : Service(), WebServer.Handler {
         return when {
             session.uri == "/status" || session.uri == "/" -> status()
 
+            session.uri == "/triggers" && session.method == NanoHTTPD.Method.GET ->
+                newFixedLengthResponse(
+                    NanoHTTPD.Response.Status.OK, APPLICATION_JSON,
+                    JSONObject(Triggers.all(this) as Map<*, *>).toString()
+                )
+
+            session.uri == "/triggers" && session.method == NanoHTTPD.Method.POST -> try {
+                Triggers.replaceAll(this, JSONObject(readBody(session)))
+                ok(JSONObject(Triggers.all(this) as Map<*, *>).toString())
+            } catch (ex: Throwable) {
+                invalidRequest(ex.message ?: "bad trigger config")
+            }
+
             session.uri == "/cancel" -> {
                 mHandler.post { removePopup(true) }
                 ok()
@@ -621,6 +634,7 @@ class PiPupService : Service(), WebServer.Handler {
             .put("address", Utils.getIpAddress())
             .put("serverAlive", mWebServer?.isAlive == true)
             .put("popupVisible", mPopup != null)
+            .put("triggers", JSONObject(Triggers.all(this) as Map<*, *>))
             .put(
                 "canDrawOverlays",
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)

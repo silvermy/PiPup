@@ -201,6 +201,33 @@ before and the remote keeps driving whatever is playing. When a popup *is*
 interactive, unmatched keys are swallowed rather than passed through -- pair it
 with `release` (or use `dismissOnKey: true`) so there is always a way out.
 
+### Trigger entries (for key-mapper apps)
+
+PiPup publishes two extra launcher entries, **Dungeon Cam** and **Front Door
+Cam**. They display nothing: launching one fires a preconfigured URL and exits.
+That makes a key mappable to a popup by any key-mapper app, since "launch an
+app" is the one action they all support.
+
+A popup URL carries a camera token that rotates, so a trigger cannot build a
+popup itself -- it calls back to whatever does (a Home Assistant webhook), which
+then posts a fresh `/notify`.
+
+Configure the URLs over HTTP rather than on the TV:
+
+```
+POST /triggers
+{
+  "dungeon":  "http://homeassistant:8123/api/webhook/pipup_dungeon",
+  "doorbell": "http://homeassistant:8123/api/webhook/pipup_doorbell"
+}
+```
+
+`GET /triggers` reads them back, and they also appear in `GET /status`. The slot
+name comes from the alias: `TriggerDungeon` -> `dungeon`.
+
+Because a key-mapper intercepts the key itself, this path does **not** take focus
+from whatever is playing -- unlike the in-popup `keys` map.
+
 ### Checking status
 
 | Property | Value     |

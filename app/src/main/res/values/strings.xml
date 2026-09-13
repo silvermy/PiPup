@@ -6,4 +6,6 @@
     <string name="more_information">For more information please read the documentation @ https://github.com/rogro82/pipup</string>
     <string name="warning_overlay">Overlay permission is missing — popups will not show.\nRun: adb shell appops set %1$s SYSTEM_ALERT_WINDOW allow</string>
     <string name="warning_battery">Battery optimisation is enabled for PiPup; the system may kill the service in the background.</string>
+    <string name="trigger_dungeon">Dungeon Cam</string>
+    <string name="trigger_doorbell">Front Door Cam</string>
 </resources>
