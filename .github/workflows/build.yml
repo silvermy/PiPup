@@ -17,6 +17,11 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        with:
+          # Default is "tools platform-tools"; Google removed the legacy "tools"
+          # package, so the default now fails. The runner image already ships the
+          # SDK, build-tools and platforms this build needs.
+          packages: ''
 
       - name: Build debug APK
         run: |
