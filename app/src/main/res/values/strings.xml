@@ -8,4 +8,6 @@
     <string name="warning_battery">Battery optimisation is enabled for PiPup; the system may kill the service in the background.</string>
     <string name="trigger_dungeon">Dungeon Cam</string>
     <string name="trigger_doorbell">Front Door Cam</string>
+    <string name="trigger_watchtv">Watch TV</string>
+    <string name="trigger_unwatchtv">Unwatch TV</string>
 </resources>
