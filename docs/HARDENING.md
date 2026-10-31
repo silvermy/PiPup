@@ -26,21 +26,19 @@ that step is gone.
 ## How a popup reaches the screen
 
 ```mermaid
-flowchart TD
-    RK["Remote key press<br/><i>RED or GREEN on the remote</i>"]
-    LT["PiPup launcher trigger<br/><i>no-display activity, fires one URL</i>"]
-    WH["Home Assistant webhook<br/><i>local_only, names its automation</i>"]
+flowchart LR
+    RK["Remote key press<br/><i>RED or GREEN</i>"]
+    LT["PiPup launcher trigger<br/><i>fires one URL, draws nothing</i>"]
+    WH["Home Assistant webhook<br/><i>local_only</i>"]
     EV["Home Assistant event<br/><i>motion, alarm or schedule</i>"]
-    SC["Script and rest_command.pipup<br/><i>mints a fresh camera token<br/>renders the JSON payload</i>"]
-    NT["POST /notify, port 7979"]
-    CD["Overlay card over the running app<br/><i>a TextureView, so it draws on top</i>"]
+    SC["Script and rest_command.pipup<br/><i>mints a fresh camera token</i>"]
+    CD["POST /notify to port 7979<br/><i>overlay card over the running app</i>"]
 
     RK --> LT
-    LT -- leaves the TV --> WH
+    LT -- "leaves the TV" --> WH
     WH --> SC
-    EV -- no round trip --> SC
-    SC --> NT
-    NT --> CD
+    EV -- "no round trip" --> SC
+    SC --> CD
 ```
 
 The long way round on the left is not an accident. A popup URL carries a
