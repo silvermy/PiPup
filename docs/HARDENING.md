@@ -4,8 +4,10 @@ This branch (`pipup-hardening`) is a fork of the abandoned
 [rogro82/PiPup](https://github.com/rogro82/PiPup) that fixes the three faults
 which made it unusable on a Sony BRAVIA — unreliable autostart, popups that
 would not draw over a running app, and 10+ second startup — and then adds
-remote-key interaction, launcher triggers and a styled card. Everything in it
-is verified on the device.
+remote-key interaction, launcher triggers and a styled card.
+
+Every measurement and behaviour described here was observed on the device.
+Where something was not tested, it says so.
 
 ## What it was forked to fix
 
@@ -85,21 +87,23 @@ launcher, fire one URL and exit without drawing anything. Button Mapper binds
 a key to "launch app", and the press becomes an HTTP call. Firing one has been
 verified not to disturb a playing app.
 
+Each alias is one entry: an activity name, the label it shows in the launcher,
+and the URL it fires. A camera button looks like this —
+
 | Alias | Shows as | Calls |
 | --- | --- | --- |
-| `.TriggerGarage` | Garage Cam | Webhook `pipup_garage` |
-| `.TriggerDoorbell` | Front Door Cam | Webhook `pipup_doorbell` |
-| `.TriggerWatchTv` | Watch TV | Generic webhook, `?id=automation.watch_tv` |
-| `.TriggerUnwatchTv` | Unwatch TV | Generic webhook, `?id=automation.unwatch_tv` |
+| `.TriggerFrontDoor` | Front Door Cam | Webhook `pipup_front_door` |
 
 The indirection exists because a popup URL carries a rotating camera token.
 The key press has to pass through Home Assistant so a fresh one gets minted.
 
-The last two share one generic webhook that names its automation in the query
-string, so a new button needs no Home Assistant changes — only a new trigger
-URL. That webhook id is long and random on purpose: it is unauthenticated, so
-**the id is the credential**. It is `local_only`, and it refuses anything that
-is not an existing `automation.*`.
+Past two or three buttons, a webhook each gets tedious. The alternative is one
+**generic webhook that names its automation in the query string**
+(`?id=automation.watch_tv`), so a new button needs no Home Assistant changes at
+all — only a new trigger URL. If you do that, the webhook id is long and random
+on purpose: it is unauthenticated, so **the id is the credential**. Make it
+`local_only` and have it refuse anything that is not an existing `automation.*`,
+or any device on the LAN can run any automation you own.
 
 Home Assistant owns the trigger URLs and re-pushes them with
 `rest_command.pipup_triggers` on start and whenever the TV turns on, so a
@@ -131,6 +135,58 @@ inside the card's background, animated with an `ObjectAnimator` on its `level`
 from 10000 to 0 and inset by `cornerRadius / 2` so it does not poke out of the
 rounded corners. The icon is set with `setCompoundDrawablesRelative` on the
 title.
+
+## Choosing a video source
+
+The single biggest lever on how a popup feels is what you point it at, not any
+setting on the card. `mediaType` picks one of four paths:
+
+| `mediaType` | What it is | Video decoder | Trade |
+| --- | --- | --- | --- |
+| `image` | One still, refetched per popup | none | Fastest and least breakable. Often all a notification needs. |
+| `mjpeg` | `multipart/x-mixed-replace`, what Home Assistant's `camera_proxy_stream` serves | none | Added by this fork. Live motion with no decoder negotiation, paid for in bandwidth — every frame is a whole JPEG. |
+| `video` | Anything ExoPlayer plays, usually HLS | yes | Cheapest for sustained video, but pays decoder setup and segment buffering before the first frame. |
+| `web` | A URL in a WebView | WebView's own | The escape hatch: WebRTC, a dashboard, any player of its own. Slowest to first frame, and needs `javaScriptEnabled`. |
+
+**For cameras, start at `mjpeg` and move only if it disappoints.** Avoiding the
+decoder is most of what took first frame from 10+ seconds to roughly one here,
+and it sidesteps a whole class of firmware decoder bugs — including the one on
+this TV that needed the software-decoder fallback. Use `image` when a still will
+do: a snapshot answers "who is at the door" as well as video does, and it is the
+most reliable path by a wide margin.
+
+### A slow popup is usually the stream, not the camera
+
+From the two cameras here, all over `mjpeg`:
+
+| Stream | Result |
+| --- | --- |
+| Doorbell, the camera's default Home Assistant stream | ~1.3 s to first frame |
+| Garage, ONVIF **substream** | ~3.8 s to first frame, ~14 fps |
+| Garage, the same camera's **main stream** | ~4 s *per frame*, ~0.2 fps, and it fails Home Assistant's stream parser outright |
+
+The striking part is that the substream is the same 1280x720 as the main
+stream and still an order of magnitude better, so resolution was not what made
+the difference. Home Assistant hides ONVIF substreams by default with
+`disabled_by=integration`, which means the better stream is often sitting there
+disabled while the camera gets the blame.
+
+Worth working through in this order:
+
+1. **Try `image` first.** If a still is slow, the problem is the camera or the
+   network, and no `mediaType` will fix it.
+2. **Look for a disabled substream entity** on the camera's integration before
+   concluding the camera is slow. Enable it and point `mjpeg` at that.
+3. **Compare the two Home Assistant endpoints by hand** — `camera_proxy` for a
+   snapshot against `camera_proxy_stream` for MJPEG. Fetching each with `curl`
+   tells you whether the camera or the TV is the slow half.
+4. **If the camera only speaks WebRTC**, `web` works, but expect seconds rather
+   than milliseconds. It is what the garage camera used before the substream
+   was found.
+
+Not tested here, but worth knowing if that runs out: go2rtc, bundled with
+recent Home Assistant, can restream most things as MJPEG, which would put an
+awkward camera back on the fast path.
 
 ## Home Assistant use cases
 
@@ -186,7 +242,7 @@ point here — the camera app is one press away.
         BACK: dismiss
         DPAD_UP: release
         DPAD_DOWN:
-          launch: com.rcreations.ipcamviewerBasic
+          launch: com.example.yourcameraapp
 ```
 
 ### An alarm that will not go away by itself
@@ -301,11 +357,6 @@ The ones that cost real time, roughly in order of how long they took to find:
   decoder needs a name-prefix fallback. Without it the preference is a no-op.
 - **`am force-stop` cancels scheduled jobs**, so a force-stopped app cannot be
   revived by any watchdog until it is launched once by hand.
-- **A slow camera popup may be a disabled substream, not a slow camera.** Home
-  Assistant hides ONVIF substreams with `disabled_by=integration`. On the
-  garage camera the substream is the same 1280x720 as the main stream but runs
-  around 14fps instead of 5.5, and the main stream fails Home Assistant's
-  stream parser outright.
 - Smaller ones: `--` inside an XML comment breaks the manifest merger;
   cleartext `http://` media URLs need `usesCleartextTraffic` once
   `targetSdk >= 28`; and `javaScriptEnabled` is off by default, so `web`
