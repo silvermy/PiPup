@@ -3,7 +3,11 @@ package nl.rogro82.pipup
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.animation.ObjectAnimator
+import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -81,7 +85,6 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
 
         applyDecoration()
         applyIcon(title)
-        applyProgress()
     }
 
     /**
@@ -93,7 +96,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
         val start = parseColor(popup.backgroundColor, DEFAULT_BACKGROUND)
         val end = popup.backgroundColorEnd?.let { parseColor(it, start) }
 
-        background = GradientDrawable().apply {
+        val card = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = popup.cornerRadius
             if (end != null && end != start) {
@@ -104,6 +107,32 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             }
             if (popup.borderWidth > 0f) {
                 setStroke(popup.borderWidth.toInt(), parseColor(popup.borderColor, Color.TRANSPARENT))
+            }
+        }
+
+        // The progress bar is a background layer, not a child view. As a child
+        // it perturbs measurement in both directions: match_parent (or
+        // wrap_content, which a bare View treats the same) stretches the card
+        // to the screen, and 0dp collapses it to minimumWidth. A drawable layer
+        // takes part in no layout pass at all.
+        background = if (!popup.showProgress || popup.duration <= 0) card else {
+            val fill = ClipDrawable(
+                ColorDrawable(parseColor(popup.progressColor ?: popup.titleColor, Color.WHITE)),
+                Gravity.START,
+                ClipDrawable.HORIZONTAL
+            )
+            LayerDrawable(arrayOf(card, fill)).apply {
+                setLayerGravity(1, Gravity.BOTTOM)
+                setLayerHeight(1, PROGRESS_HEIGHT_PX)
+                val side = (popup.cornerRadius / 2f).toInt()
+                setLayerInset(1, side, 0, side, side)
+                // 10000 = full, 0 = empty.
+                fill.level = 10000
+                ObjectAnimator.ofInt(fill, "level", 10000, 0).apply {
+                    duration = popup.duration * 1000L
+                    interpolator = LinearInterpolator()
+                    start()
+                }
             }
         }
 
@@ -137,54 +166,6 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             },
             onError = { /* a missing icon should never cost us the popup */ }
         )
-    }
-
-    /** Bar that empties left-to-right over the popup's lifetime. */
-    private fun applyProgress() {
-        val bar = findViewById<View>(R.id.popup_progress) ?: return
-        if (!popup.showProgress || popup.duration <= 0) {
-            removeView(bar)
-            return
-        }
-
-        bar.visibility = View.VISIBLE
-        bar.setBackgroundColor(
-            parseColor(popup.progressColor ?: popup.titleColor, Color.WHITE)
-        )
-
-        // Scale rather than resize: no layout pass per frame, and the width is
-        // not known until this view has been measured.
-        bar.post {
-            // The bar measures to zero so it cannot stretch the card (a
-            // match_parent child drags a wrap_content LinearLayout out to the
-            // full screen). Give it the card's inner width now that the card
-            // has settled.
-            val inner = width - paddingLeft - paddingRight
-            if (inner > 0) {
-                bar.layoutParams = bar.layoutParams.apply { this.width = inner }
-                bar.requestLayout()
-            }
-
-            bar.pivotX = 0f
-            bar.scaleX = 1f
-            bar.animate()
-                .scaleX(0f)
-                .setDuration(popup.duration * 1000L)
-                .setInterpolator(LinearInterpolator())
-                .start()
-        }
-    }
-
-    open fun destroy() {}
-
-    protected fun frame(): FrameLayout = findViewById(R.id.popup_frame)
-
-    /** Never let a typo in a colour string take the whole popup down. */
-    private fun parseColor(value: String, fallback: Int): Int = try {
-        Color.parseColor(value)
-    } catch (ex: IllegalArgumentException) {
-        Log.w(LOG_TAG, "invalid color '$value', using fallback")
-        fallback
     }
 
     private class Default(context: Context, popup: PopupProps) : PopupView(context, popup)
@@ -558,6 +539,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
     companion object {
         const val LOG_TAG = "PopupView"
         private const val LIVE_TARGET_OFFSET_MS = 1000L
+        private const val PROGRESS_HEIGHT_PX = 6
         private val DEFAULT_BACKGROUND = Color.parseColor(PopupProps.DEFAULT_BACKGROUND_COLOR)
 
         /**
