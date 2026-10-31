@@ -155,6 +155,16 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
         // Scale rather than resize: no layout pass per frame, and the width is
         // not known until this view has been measured.
         bar.post {
+            // The bar measures to zero so it cannot stretch the card (a
+            // match_parent child drags a wrap_content LinearLayout out to the
+            // full screen). Give it the card's inner width now that the card
+            // has settled.
+            val inner = width - paddingLeft - paddingRight
+            if (inner > 0) {
+                bar.layoutParams = bar.layoutParams.apply { this.width = inner }
+                bar.requestLayout()
+            }
+
             bar.pivotX = 0f
             bar.scaleX = 1f
             bar.animate()

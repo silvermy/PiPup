@@ -20,8 +20,10 @@
             android:id="@+id/popup_message" android:textSize="24sp"
     />
     <!-- Empties left-to-right over the popup's duration. Hidden unless asked for. -->
+    <!-- wrap_content so it measures to zero and cannot widen the card; its real
+         width is set in code once the card has been measured. -->
     <View
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="4dp"
             android:id="@+id/popup_progress"
             android:layout_marginTop="8dp"
