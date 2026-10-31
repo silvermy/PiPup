@@ -3,6 +3,7 @@ package nl.rogro82.pipup
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -11,6 +12,7 @@ import android.view.Gravity
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.view.WindowManager
 import android.webkit.ConsoleMessage
 import android.webkit.PermissionRequest
@@ -77,7 +79,90 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             message.setTextColor(parseColor(popup.messageColor, Color.WHITE))
         }
 
-        setBackgroundColor(parseColor(popup.backgroundColor, DEFAULT_BACKGROUND))
+        applyDecoration()
+        applyIcon(title)
+        applyProgress()
+    }
+
+    /**
+     * Card background: rounded corners, optional gradient, optional border and
+     * drop shadow. With every field at its default this paints exactly the flat
+     * rectangle the app has always drawn.
+     */
+    private fun applyDecoration() {
+        val start = parseColor(popup.backgroundColor, DEFAULT_BACKGROUND)
+        val end = popup.backgroundColorEnd?.let { parseColor(it, start) }
+
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = popup.cornerRadius
+            if (end != null && end != start) {
+                orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                colors = intArrayOf(start, end)
+            } else {
+                setColor(start)
+            }
+            if (popup.borderWidth > 0f) {
+                setStroke(popup.borderWidth.toInt(), parseColor(popup.borderColor, Color.TRANSPARENT))
+            }
+        }
+
+        // Clips the media to the rounded card. Safe here because video renders
+        // into a TextureView; a SurfaceView would ignore this entirely.
+        clipToOutline = popup.cornerRadius > 0f
+
+        if (popup.elevation > 0f) {
+            elevation = popup.elevation
+        }
+    }
+
+    /** Icon rides on the title as a compound drawable, so the layout is untouched. */
+    private fun applyIcon(title: TextView) {
+        val url = popup.icon
+        if (url.isNullOrEmpty() || popup.title.isNullOrEmpty()) return
+
+        ImageLoader.load(
+            url = url,
+            targetWidth = popup.iconSize,
+            onLoaded = { bitmap ->
+                uiHandler.post {
+                    val drawable = android.graphics.drawable.BitmapDrawable(resources, bitmap)
+                    val h = if (bitmap.width > 0) {
+                        (popup.iconSize.toFloat() / bitmap.width * bitmap.height).toInt()
+                    } else popup.iconSize
+                    drawable.setBounds(0, 0, popup.iconSize, h)
+                    title.setCompoundDrawablesRelative(drawable, null, null, null)
+                    title.compoundDrawablePadding = popup.iconSize / 3
+                }
+            },
+            onError = { /* a missing icon should never cost us the popup */ }
+        )
+    }
+
+    /** Bar that empties left-to-right over the popup's lifetime. */
+    private fun applyProgress() {
+        val bar = findViewById<View>(R.id.popup_progress) ?: return
+        if (!popup.showProgress || popup.duration <= 0) {
+            removeView(bar)
+            return
+        }
+
+        bar.visibility = View.VISIBLE
+        bar.setBackgroundColor(
+            parseColor(popup.progressColor ?: popup.titleColor, Color.WHITE)
+        )
+
+        // Scale rather than resize: no layout pass per frame, and the width is
+        // not known until this view has been measured.
+        bar.post {
+            bar.pivotX = 0f
+            bar.scaleX = 1f
+            bar.animate()
+                .scaleX(0f)
+                .setDuration(popup.duration * 1000L)
+                .setInterpolator(LinearInterpolator())
+                .start()
+        }
     }
 
     open fun destroy() {}

@@ -12,10 +12,18 @@
             android:layout_height="wrap_content"
             android:id="@+id/popup_title"
             android:textSize="30sp"
-            android:textStyle="bold"/>
+            android:textStyle="bold"
+            android:gravity="center_vertical"/>
     <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:id="@+id/popup_message" android:textSize="24sp"
     />
+    <!-- Empties left-to-right over the popup's duration. Hidden unless asked for. -->
+    <View
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:id="@+id/popup_progress"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"/>
 </merge>

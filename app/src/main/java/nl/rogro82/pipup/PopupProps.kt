@@ -43,7 +43,28 @@ data class PopupProps(
     val dismissKeys: Set<String> = emptySet(),
 
     /** Remote key name -> what it does. See [KeyAction]. */
-    val keys: Map<String, KeyAction> = emptyMap()
+    val keys: Map<String, KeyAction> = emptyMap(),
+
+    // ---- appearance; every one defaults to the old flat-rectangle look ----
+
+    /** Corner radius in px. 0 keeps the original square card. */
+    val cornerRadius: Float = 0f,
+    val borderWidth: Float = 0f,
+    val borderColor: String = "#00000000",
+
+    /** When set, the background runs [backgroundColor] -> this, top to bottom. */
+    val backgroundColorEnd: String? = null,
+
+    /** Drop shadow, in px. Needs a corner radius to look like anything. */
+    val elevation: Float = 0f,
+
+    /** A bar along the bottom that empties over [duration]. */
+    val showProgress: Boolean = false,
+    val progressColor: String? = null,
+
+    /** Small image shown to the left of the title. */
+    val icon: String? = null,
+    val iconSize: Int = DEFAULT_ICON_SIZE
 ) {
     /** True when this popup needs input focus, which is what makes keys reach it. */
     val interactive: Boolean get() = dismissKeys.isNotEmpty() || keys.isNotEmpty()
@@ -140,6 +161,7 @@ data class PopupProps(
         const val DEFAULT_VOLUME = 0f
         const val DEFAULT_PREFER_SOFTWARE_DECODER = true
         const val DEFAULT_LOOP = true
+        const val DEFAULT_ICON_SIZE = 48
 
         /** Sentinel in [dismissKeys] meaning "any key dismisses". */
         const val DISMISS_ANY = "ANY"
@@ -172,7 +194,16 @@ data class PopupProps(
                     ?: DEFAULT_PREFER_SOFTWARE_DECODER,
                 loop = json.optBooleanOrNull("loop") ?: DEFAULT_LOOP,
                 dismissKeys = parseDismissKeys(json.opt("dismissOnKey")),
-                keys = parseKeys(json.optJSONObject("keys"))
+                keys = parseKeys(json.optJSONObject("keys")),
+                cornerRadius = json.optFloatOrNull("cornerRadius") ?: 0f,
+                borderWidth = json.optFloatOrNull("borderWidth") ?: 0f,
+                borderColor = json.optStringOrNull("borderColor") ?: "#00000000",
+                backgroundColorEnd = json.optStringOrNull("backgroundColorEnd"),
+                elevation = json.optFloatOrNull("elevation") ?: 0f,
+                showProgress = json.optBooleanOrNull("showProgress") ?: false,
+                progressColor = json.optStringOrNull("progressColor"),
+                icon = json.optStringOrNull("icon"),
+                iconSize = json.optIntOrNull("iconSize") ?: DEFAULT_ICON_SIZE
             )
         }
 
