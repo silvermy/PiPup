@@ -111,10 +111,10 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
         }
 
         // The progress bar is a background layer, not a child view. As a child
-        // it perturbs measurement in both directions: match_parent (or
-        // wrap_content, which a bare View treats the same) stretches the card
-        // to the screen, and 0dp collapses it to minimumWidth. A drawable layer
-        // takes part in no layout pass at all.
+        // it perturbed measurement whichever width it had: match_parent (and
+        // wrap_content, which a bare View measures identically) stretched the
+        // card to the screen; 0dp collapsed it to minimumWidth. A drawable
+        // layer joins no layout pass at all.
         background = if (!popup.showProgress || popup.duration <= 0) card else {
             val fill = ClipDrawable(
                 ColorDrawable(parseColor(popup.progressColor ?: popup.titleColor, Color.WHITE)),
@@ -126,8 +126,7 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
                 setLayerHeight(1, PROGRESS_HEIGHT_PX)
                 val side = (popup.cornerRadius / 2f).toInt()
                 setLayerInset(1, side, 0, side, side)
-                // 10000 = full, 0 = empty.
-                fill.level = 10000
+                fill.level = 10000   // 10000 full, 0 empty
                 ObjectAnimator.ofInt(fill, "level", 10000, 0).apply {
                     duration = popup.duration * 1000L
                     interpolator = LinearInterpolator()
@@ -166,6 +165,18 @@ sealed class PopupView(context: Context, val popup: PopupProps) : LinearLayout(c
             },
             onError = { /* a missing icon should never cost us the popup */ }
         )
+    }
+
+    open fun destroy() {}
+
+    protected fun frame(): FrameLayout = findViewById(R.id.popup_frame)
+
+    /** Never let a typo in a colour string take the whole popup down. */
+    private fun parseColor(value: String, fallback: Int): Int = try {
+        Color.parseColor(value)
+    } catch (ex: IllegalArgumentException) {
+        Log.w(LOG_TAG, "invalid color '$value', using fallback")
+        fallback
     }
 
     private class Default(context: Context, popup: PopupProps) : PopupView(context, popup)
