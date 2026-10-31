@@ -26,17 +26,15 @@ that step is gone.
 ## How a popup reaches the screen
 
 ```mermaid
-flowchart LR
-    RK["Remote key press<br/><i>RED or GREEN</i>"]
-    LT["PiPup launcher trigger<br/><i>fires one URL, draws nothing</i>"]
-    WH["Home Assistant webhook<br/><i>local_only</i>"]
+flowchart TD
+    RK["Remote key press<br/><i>RED or GREEN on the remote</i>"]
+    LT["PiPup launcher trigger<br/><i>leaves the TV, fires one URL</i>"]
     EV["Home Assistant event<br/><i>motion, alarm or schedule</i>"]
-    SC["Script and rest_command.pipup<br/><i>mints a fresh camera token</i>"]
-    CD["POST /notify to port 7979<br/><i>overlay card over the running app</i>"]
+    SC["Home Assistant webhook, script, rest_command.pipup<br/><i>mints a fresh camera token, renders the JSON</i>"]
+    CD["POST /notify to port 7979<br/><i>overlay card over the running app, on a TextureView</i>"]
 
     RK --> LT
-    LT -- "leaves the TV" --> WH
-    WH --> SC
+    LT --> SC
     EV -- "no round trip" --> SC
     SC --> CD
 ```
