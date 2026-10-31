@@ -4,6 +4,9 @@ PiPup is an application that allows displaying user-defined custom notifications
 
 The most common use-case for this application is for sending notifications, from a home-automation solution, to your Android TV.
 
+> **This fork** (`pipup-hardening`) fixes autostart, lets popups draw over a running app, cuts startup to a few hundred milliseconds, and adds remote-key actions, launcher triggers and card styling.
+> See [docs/HARDENING.md](docs/HARDENING.md).
+
 ![](https://github.com/rogro82/PiPup/raw/master/graphics/screenshot-1.png)
 
 __Some example scenarios:__
